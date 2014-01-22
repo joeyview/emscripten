@@ -90,6 +90,8 @@ for arg in sys.argv[2:]:
     leading = 'embed'
   elif arg == '--exclude':
     leading = 'exclude'
+  elif arg == '--delaypack':
+    leading='delaypack'
   elif arg == '--compress':
     compress_cnt = 1
     Compression.on = True
@@ -114,7 +116,7 @@ for arg in sys.argv[2:]:
     plugin = open(arg.split('=')[1], 'r').read()
     eval(plugin) # should append itself to plugins
     leading = ''
-  elif leading == 'preload' or leading == 'embed':
+  elif leading == 'preload' or leading == 'embed' or leading == 'delaypack':
     mode = leading
     if '@' in arg:
       srcpath, dstpath = arg.split('@') # User is specifying destination filename explicitly.
@@ -398,6 +400,9 @@ if has_preloaded:
 ''')
 
 counter = 0
+if file_['mode'] == 'delaypack':
+   code +='''\nthis.delayLoadFileStatus={file:{},jsfile:{}};\n'''
+
 for file_ in data_files:
   filename = file_['dstpath']
   dirname = os.path.dirname(filename)
@@ -430,6 +435,10 @@ for file_ in data_files:
       'crunched': '1' if crunch and filename.endswith(CRUNCH_INPUT_SUFFIX) else '0',
       'audio': '1' if filename[-4:] in AUDIO_SUFFIXES else '0',
     }
+  elif file_['mode'] == 'delaypack':
+    # Delay Pack Data
+    code += '''Module['FS_delayCreateDataFile']('%s', '%s',  true, true);\n''' % (dirname, basename)
+
   else:
     assert 0
 

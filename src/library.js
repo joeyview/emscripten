@@ -1559,7 +1559,7 @@ LibraryManager.library = {
       self.called = true;
       assert(Runtime.dynamicAlloc);
       self.alloc = Runtime.dynamicAlloc;
-      Runtime.dynamicAlloc = function() { abort('cannot dynamically allocate, sbrk now has control') };
+      //Runtime.dynamicAlloc = function() { abort('cannot dynamically allocate, sbrk now has control') };
     }
     var ret = DYNAMICTOP;
     if (bytes != 0) self.alloc(bytes);

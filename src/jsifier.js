@@ -308,7 +308,15 @@ function JSify(data, functionsOnly) {
           return;
         }
         // Library items need us to emit something, but everything else requires nothing.
-        if (!LibraryManager.library[item.ident.slice(1)]) return;
+        if (!LibraryManager.library[item.ident.slice(1)]) {
+			if(sym_deps.variable.hasOwnProperty(item.ident)) {
+				sym_deps.variable[item.ident]=true;
+			}
+			if (  (sym_deps.variable.hasOwnProperty(item.ident) || EXPORT_ALL || (item.ident in EXPORTED_GLOBALS))) {
+			  item.JS += '\nModule["' + item.ident + '"] = ' + item.ident + ';';
+			}
+			return;
+		}
       }
 
       // ensure alignment
@@ -324,7 +332,10 @@ function JSify(data, functionsOnly) {
     var js = (index !== null ? '' : item.ident + '=') + constant;
     if (js) js += ';';
 
-    if (!ASM_JS && NAMED_GLOBALS && (EXPORT_ALL || (item.ident in EXPORTED_GLOBALS))) {
+	if(sym_deps.variable.hasOwnProperty(item.ident)) {
+		sym_deps.variable[item.ident]=true;
+	}
+    if (  (sym_deps.variable.hasOwnProperty(item.ident) || EXPORT_ALL || (item.ident in EXPORTED_GLOBALS))) {
       js += '\nModule["' + item.ident + '"] = ' + item.ident + ';';
     }
     if (BUILD_AS_SHARED_LIB == 2 && !item.private_) {
@@ -334,6 +345,11 @@ function JSify(data, functionsOnly) {
     if (item.external && !NAMED_GLOBALS) {
       js = 'var ' + item.ident + '=' + js; // force an explicit naming, even if unnamed globals, for asm forwarding
     }
+    if (BUILD_AS_SHARED_LIB >= 1) {
+       if(item.ident in EXPORTED_GLOBALS)
+          js += '\nparent["' + item.ident + '"] = ' + item.ident+ ';';
+    }
+
     itemsDict.GlobalVariableStub.push({
       intertype: 'GlobalVariable',
       JS: js,
@@ -344,7 +360,8 @@ function JSify(data, functionsOnly) {
   function aliasHandler(item) {
     item.intertype = 'GlobalVariableStub';
     itemsDict.GlobalVariableStub.push(item);
-    item.JS = 'var ' + item.ident + ';';
+	item.JS = 'var ' + item.ident +'='+item.value.ident +';';
+	item.JS += 'Module["'+ item.ident +'"] ='+item.value.ident;
     // Set the actual value in a postset, since it may be a global variable. We also order by dependencies there
     Variables.globals[item.ident].targetIdent = item.value.ident;
     var value = Variables.globals[item.ident].resolvedAlias = finalizeLLVMParameter(item.value);
@@ -464,7 +481,7 @@ function JSify(data, functionsOnly) {
       }
       if (SIDE_MODULE) return ';'; // we import into the side module js library stuff from the outside parent 
       if ((!ASM_JS || phase == 'pre' || phase == 'glue') &&
-          (EXPORT_ALL || (ident in EXPORTED_FUNCTIONS))) {
+          (sym_deps.func.hasOwnProperty(ident) || EXPORT_ALL || (ident in EXPORTED_FUNCTIONS))) {
         contentText += '\nModule["' + ident + '"] = ' + ident + ';';
       }
       return depsText + contentText;
@@ -488,7 +505,7 @@ function JSify(data, functionsOnly) {
           delete LibraryManager.library[shortident + '__deps'];
         }
       }
-      if (!LINKABLE && !LibraryManager.library.hasOwnProperty(shortident) && !LibraryManager.library.hasOwnProperty(shortident + '__inline')) {
+      if (sym_deps.func=={} &&!LINKABLE && !LibraryManager.library.hasOwnProperty(shortident) && !LibraryManager.library.hasOwnProperty(shortident + '__inline')) {
         if (ERROR_ON_UNDEFINED_SYMBOLS) error('unresolved symbol: ' + shortident);
         else if (VERBOSE || WARN_ON_UNDEFINED_SYMBOLS) warn('unresolved symbol: ' + shortident);
         if (ASM_JS) {
@@ -499,6 +516,18 @@ function JSify(data, functionsOnly) {
         }
       }
       item.JS = cancel ? ';' : addFromLibrary(shortident);
+	  if( sym_deps.func!={}  && sym_deps.linkfunc==false) {
+		  var func=sym_deps.func;
+		  sym_deps.linkfunc=true;
+		  for(var i in func) {
+			  //if(func.hasOwnProperty(i)) continue;
+			  shortident=i.substring(1,i.length);
+			  if(!LibraryManager.library.hasOwnProperty(shortident)) continue;
+			  item.JS+=addFromLibrary(shortident);
+			  func[i]=true;
+		  }
+	  }
+
     }
   }
 
@@ -1836,6 +1865,25 @@ function JSify(data, functionsOnly) {
     if (abortExecution) throw 'Aborting compilation due to previous errors';
 
     if (phase == 'pre' || phase == 'funcs') {
+      if(phase == 'pre') {
+		  var _deps={func:{},variable:{}};
+		  if(!BUILD_AS_SHARED_LIB) {
+			  var src=sym_deps.func;
+			  var dst=_deps.func;
+			  for(var i in src) {
+				  if(src[i]) continue;
+				  dst[i]=false;
+			  }
+			  src=sym_deps.variable;
+			  dst=_deps.variable;
+			  for(var i in src) {
+				  if(src[i]) continue;
+				  dst[i]=false;
+			  }
+			  _deps.libs=sym_deps.libs;
+			  print('var RuntimeSymbol=JSON.parse(\''+JSON.stringify(_deps)+"');");
+		  }
+	  }
       PassManager.serialize();
       return;
     }
@@ -1925,11 +1973,41 @@ function JSify(data, functionsOnly) {
       }
     }
 
+	if(BUILD_AS_SHARED_LIB) {
+		print('\n//LIB_DATA:' + JSON.stringify({
+		  sym_deps:{libs:sym_deps.libs,variable:sym_deps.variable,func:sym_deps.func}
+		}));
+		print('//END_LIB_DATA');
+	}
+
     PassManager.serialize();
   }
 
   // Data
 
+  (function (mainPass){
+	  function addsymbol(item){
+		  if(item.external==null || item.private_==null || item.private_) return;
+		  if(item.ident.indexOf("_GLOBAL__")==0) return;
+		  if(item.external) {
+			  if(item.intertype=='globalVariable') {
+				  sym_deps.variable[item.ident]=false;
+			  }else{
+				  sym_deps.func[item.ident]=false;
+			  }
+		  }
+	  }
+	  if (mainPass) {
+		  data.functionStubs.forEach(addsymbol);
+	  }else{
+		  sortGlobals(data.globalVariables).forEach(addsymbol);
+		  data.aliass.forEach(addsymbol);
+		  data.functions.forEach(addsymbol);
+		  for(var i in EXPORTED_FUNCTIONS) {
+			  sym_deps.func[i]=false;
+		  }
+	  }
+  })(mainPass);
   if (mainPass) {
     if (phase == 'pre') {
       // types have been parsed, so we can figure out function signatures (which can use types)

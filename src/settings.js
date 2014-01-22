@@ -443,6 +443,8 @@ var DEAD_FUNCTIONS = []; // Functions on this list are not converted to JS, and 
                          // library functions (e.g., you can use this to kill printf).
                          // TODO: options to lazily load such functions
 
+var LINK_OPTIONS=[];
+
 var EXPLICIT_ZEXT = 0; // If 1, generate an explicit conversion of zext i1 to i32, using ?:
 
 var NECESSARY_BLOCKADDRS = []; // List of (function, block) for all block addresses that are taken.

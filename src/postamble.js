@@ -74,16 +74,23 @@ Module['callMain'] = Module.callMain = function callMain(args) {
     var start = Date.now();
 #endif
 
+#if USE_EXTERNAL_MAIN
+    JSEntry(argc,argv,this);
+#else
     var ret = Module['_main'](argc, argv, 0);
+#endif
 
 #if BENCHMARK
     Module.realPrint('main() took ' + (Date.now() - start) + ' milliseconds');
 #endif
 
+#if USE_EXTERNAL_MAIN
+#else
     // if we're not running an evented main loop, it's time to exit
     if (!Module['noExitRuntime']) {
       exit(ret);
     }
+#endif
   }
   catch(e) {
     if (e instanceof ExitStatus) {

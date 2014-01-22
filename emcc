@@ -800,6 +800,7 @@ try:
   split_js_file = None
   preload_files = []
   embed_files = []
+  delay_pack_files =[]
   exclude_files = []
   compression = None
   ignore_dynamic_linking = False
@@ -916,6 +917,11 @@ try:
     elif newargs[i].startswith('--preload-file'):
       check_bad_eq(newargs[i])
       preload_files.append(newargs[i+1])
+      newargs[i] = ''
+      newargs[i+1] = ''
+    elif newargs[i].startswith('--delay-pack-file'):
+      check_bad_eq(newargs[i])
+      delay_pack_files.append(newargs[i+1])
       newargs[i] = ''
       newargs[i+1] = ''
     elif newargs[i].startswith('--exclude-file'):
@@ -1387,7 +1393,7 @@ try:
   extra_files_to_link = []
 
   if not LEAVE_INPUTS_RAW and \
-     not shared.Settings.BUILD_AS_SHARED_LIB == 2 and \
+     not shared.Settings.BUILD_AS_SHARED_LIB and \
      not shared.Settings.SIDE_MODULE: # shared libraries/side modules link no C libraries, need them in parent
 
     # Check if we need to include some libraries that we compile. (We implement libc ourselves in js, but
@@ -1851,7 +1857,7 @@ try:
   if DEBUG: save_intermediate('original')
 
   # Embed and preload files
-  if len(preload_files) + len(embed_files) > 0:
+  if len(preload_files) + len(embed_files) +len(delay_pack_files) > 0:
     logging.debug('setting up files')
     file_args = []
     if len(preload_files) > 0:
@@ -1860,6 +1866,9 @@ try:
     if len(embed_files) > 0:
       file_args.append('--embed')
       file_args += embed_files
+    if len(delay_pack_files) > 0:
+      file_args.append('--delaypack')
+      file_args += delay_pack_files
     if len(exclude_files) > 0:
       file_args.append('--exclude')
       file_args += exclude_files
@@ -2021,6 +2030,12 @@ try:
          '--mapFileBaseName', map_file_base_name,
          '--offset', str(offset)])
 
+  def createtarget(src,dst):
+    src_file=open(src).read()
+    dst_file=open(dst, 'w')
+    dst_file.write(src_file.replace('<<< CLOSURE_NAME >>>','var '+'_'+dst.replace('.','_')))
+    dst_file.close()
+
   # If we were asked to also generate HTML, do that
   if final_suffix == 'html':
     logging.debug('generating HTML')
@@ -2031,11 +2046,13 @@ try:
     base_js_target = os.path.basename(js_target)
     if proxy_to_worker:
       html.write(shell.replace('{{{ SCRIPT }}}', '<script>' + open(shared.path_from_root('src', 'proxyClient.js')).read().replace('{{{ filename }}}', target_basename) + '</script>'))
-      shutil.move(final, js_target)
+      #shutil.move(final, js_target)
+      createtarget(final, js_target)
     elif not Compression.on:
       if debug_level >= 4:
         generate_source_map(target)
-      shutil.move(final, js_target)
+      #shutil.move(final, js_target)
+      createtarget(final, js_target)
       # TODO: use an async blob, which would allow code rewriting on the client:
       #   var blob = new Blob([codeString]);
       #   var script = document.createElement('script');
@@ -2045,7 +2062,8 @@ try:
       html.write(shell.replace('{{{ SCRIPT }}}', script_tag))
     else:
       # Compress the main code
-      shutil.move(final, js_target)
+      #shutil.move(final, js_target)
+      createtarget(final, js_target)
       Compression.compress(js_target)
 
       # Run the decompressor in a worker, and add code to
@@ -2113,7 +2131,8 @@ try:
     else:
       if debug_level >= 4: generate_source_map(target)
       # copy final JS to output
-      shutil.move(final, target)
+      #shutil.move(final, target)
+      createtarget(final, target)
 
   if DEBUG: logging.debug('total time: %.2f seconds' % (time.time() - start_time))
 

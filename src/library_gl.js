@@ -879,12 +879,12 @@ var LibraryGL = {
 
   glGetTexParameterfv__sig: 'viii',
   glGetTexParameterfv: function(target, pname, params) {
-    {{{ makeSetValue('params', '0', 'Module.getTexParameter(target, pname)', 'float') }}};
+    {{{ makeSetValue('params', '0', 'Module.ctx.getTexParameter(target, pname)', 'float') }}};
   },
 
   glGetTexParameteriv__sig: 'viii',
   glGetTexParameteriv: function(target, pname, params) {
-    {{{ makeSetValue('params', '0', 'Module.getTexParameter(target, pname)', 'i32') }}};
+    {{{ makeSetValue('params', '0', 'Module.ctx.getTexParameter(target, pname)', 'i32') }}};
   },
 
   glTexParameterfv__sig: 'viii',

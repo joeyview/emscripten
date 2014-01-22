@@ -9,6 +9,7 @@ var LLVM = {
                 'available_externally', 'linkonce', 'common', 'weak', 'appending', 'extern_weak', 'linkonce_odr',
                 'weak_odr', 'externally_visible', 'dllimport', 'dllexport', 'unnamed_addr', 'thread_local'),
   VISIBILITIES: set('default', 'hidden', 'protected'),
+  PUBLIC: set('default'),
   PARAM_ATTR: set('noalias', 'signext', 'zeroext', 'inreg', 'sret', 'nocapture', 'nest'),
   FUNC_ATTR: set('hidden', 'nounwind', 'define', 'inlinehint', '{'),
   CALLING_CONVENTIONS: set('ccc', 'fastcc', 'coldcc', 'cc10', 'x86_fastcallcc', 'x86_stdcallcc', 'cc11'),
@@ -487,6 +488,7 @@ var PassManager = {
         Variables: Variables,
         Functions: Functions,
         EXPORTED_FUNCTIONS: EXPORTED_FUNCTIONS, // needed for asm.js global constructors (ctors)
+        sym_deps:{libs:sym_deps.libs,variable:sym_deps.variable,func:sym_deps.func},
         Runtime: { GLOBAL_BASE: Runtime.GLOBAL_BASE }
       }));
     } else if (phase == 'funcs') {
@@ -496,6 +498,7 @@ var PassManager = {
           usesSIMD: Types.usesSIMD,
           preciseI64MathUsed: Types.preciseI64MathUsed
         },
+        sym_deps:{libs:sym_deps.libs,variable:sym_deps.variable,func:sym_deps.func},
         Functions: {
           blockAddresses: Functions.blockAddresses,
           indexedFunctions: Functions.indexedFunctions,
@@ -506,10 +509,12 @@ var PassManager = {
       }));
     } else if (phase == 'post') {
       print('\n//FORWARDED_DATA:' + JSON.stringify({
+		sym_deps:{libs:sym_deps.libs,variable:sym_deps.variable,func:sym_deps.func},
         Functions: { tables: Functions.tables }
       }));
     } else if (phase == 'glue') {
       print('\n//FORWARDED_DATA:' + JSON.stringify({
+        sym_deps:{libs:sym_deps.libs,variable:sym_deps.variable,func:sym_deps.func},
         Functions: Functions,
         EXPORTED_FUNCTIONS: EXPORTED_FUNCTIONS
       }));
@@ -527,6 +532,7 @@ var PassManager = {
       Functions[i] = data.Functions[i];
     }
     EXPORTED_FUNCTIONS = data.EXPORTED_FUNCTIONS;
+	sym_deps={linkfunc:false,variable:data.sym_deps.variable,func:data.sym_deps.func,libs:data.sym_deps.libs};
     /*
     print('\n//LOADED_DATA:' + phase + ':' + JSON.stringify({
       Types: Types,

@@ -152,7 +152,107 @@ if (settings_file) {
     eval(key + ' = ' + JSON.stringify(value));
   }
 }
+globalEval("var sym_deps={linkfunc:false,libs:{},func:{},variable:{}};");
 
+LINK_OPTIONS.forEach(function(option){
+	var libs=(function(option){
+		var dir='.';
+		var libs=[];
+		var tmp={};
+		var index=0;
+		var str=option.split(' ');
+		str.forEach(function(option){
+			switch(option.substr(0,2)) {
+			case '-L':
+				dir=option.substr(2,option.length);
+				break;
+			case '-l':
+				tmp['lib'+option.substr(2,option.length)+'.so.js']=1;
+				break;
+			}
+		});
+		for(var i in tmp) {
+			libs.push(dir+'/'+i);
+		}
+    return libs;
+	})(option);
+	if(BUILD_AS_SHARED_LIB) {
+		libs.forEach(function(lib,idx){
+		var fs = require('fs');
+		fs.exists(lib, function(exists) {
+			if (!exists) {
+				warn( lib+' not exist! ');
+			}
+		});
+		var name=lib.split ('/');
+		sym_deps.libs[name[name.length -1]]=idx;
+		});
+	}else{
+		var libsSymbol={};
+		function ReadLibSymbol(dir,lib,depth){
+			if(lib in libsSymbol){
+				function updateLoadDepth(lib,depth){
+					for(var i in libsSymbol[lib].deps.libs) {
+						if(libsSymbol.hasOwnProperty (i)) {
+							if(libsSymbol[i].depth<depth && !libsSymbol[lib].update) {
+								libsSymbol[i].depth=depth;
+								updateLoadDepth(i,depth+1);
+							}
+						}
+					}
+				}
+				libsSymbol[lib].update=true;
+				updateLoadDepth(lib,depth);
+				libsSymbol[lib].update=false;
+				return;
+			}
+
+			var str=read(dir+lib);
+			var lib_deps_start='//LIB_DATA:';
+			var lib_deps_end='//END_LIB_DATA';
+			var deps;
+			str=str.substring (str.indexOf(lib_deps_start)+lib_deps_start.length,str.indexOf(lib_deps_end));
+			deps=JSON.parse(str);
+			libsSymbol[lib]={depth:depth,deps:deps.sym_deps,update:false};
+
+			++depth;
+			for(var i in deps.sym_deps.libs) {
+				ReadLibSymbol(dir,i,depth);
+			}
+
+		}
+		for(var i=0;i<libs.length;++i) {
+			var lib=libs[i];
+			var name=lib.split ('/');
+			var dir='';
+			lib=name.pop();
+			dir=name.join('/')+'/';
+			ReadLibSymbol(dir,lib,0);
+		}
+
+		var libseqs=[];
+		for(var i in libsSymbol) {
+			libseqs.push([i, libsSymbol[i].depth])
+		}
+		libseqs.sort(function(a, b) {return b[1] - a[1] })
+
+		sym_deps.libs=[];
+		libseqs.forEach(function(i){sym_deps.libs.push(i[0]);});
+		sym_deps.libs.forEach(function(lib,idx){
+			function AddLinkSymbol(dst,src,idx){
+				for(var i in src) {
+					if(dst[i]==null){
+						dst[i]=false;
+					}else{
+						//warn('duplicate symbol '+i);
+					}
+				}
+			}
+			AddLinkSymbol(sym_deps.func,libsSymbol[lib].deps.func,idx);
+			AddLinkSymbol(sym_deps.variable,libsSymbol[lib].deps.variable,idx);
+		});
+	}
+});
 
 if (CORRECT_SIGNS >= 2) {
   CORRECT_SIGNS_LINES = set(CORRECT_SIGNS_LINES); // for fast checking

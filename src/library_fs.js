@@ -8,6 +8,7 @@ mergeInto(LibraryManager.library, {
                 'Module["FS_createFolder"] = FS.createFolder;' +
                 'Module["FS_createPath"] = FS.createPath;' +
                 'Module["FS_createDataFile"] = FS.createDataFile;' +
+                'Module["FS_delayCreateDataFile"] = FS.delayCreateDataFile;' +
                 'Module["FS_createPreloadedFile"] = FS.createPreloadedFile;' +
                 'Module["FS_createLazyFile"] = FS.createLazyFile;' +
                 'Module["FS_createLink"] = FS.createLink;' +
@@ -1250,6 +1251,68 @@ mergeInto(LibraryManager.library, {
         FS.chmod(node, mode);
       }
       return node;
+    },
+    delayCreateDataFile: function(parent, name, canRead, canWrite, canOwn) {
+       assert(ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER,"Delay pack only work on browser, use --embed-file instead");
+       var DataReceiver = (function() {
+        return {
+            /*
+                Get data from a specified url
+                Returns a function with 'data' parameter
+
+                url         [string]: URL path of the file to be downloaded
+                callback    [function]: function to be executed when file has finished downloading
+            */
+            getData: function(url, callback,text){
+                var xhr = new XMLHttpRequest();
+                xhr.url=url;
+                xhr.text=text;
+                xhr.open('GET', url, true);
+                if(!text)
+                   xhr.responseType = "arraybuffer";
+                xhr.onload = function(e) {
+                    callback(this);
+                }
+                xhr.send();
+            }
+            }
+       });
+
+       var receiver = new DataReceiver();
+       var url=parent+'/'+name;
+       if(url.indexOf('/')==0)
+          url=url.substring(1,url.length);
+       Module['addRunDependency'](url);
+       delayLoadFileStatus.file[url]={};
+       delayLoadFileStatus.file[url].parent=parent;
+       delayLoadFileStatus.file[url].name=name;
+       delayLoadFileStatus.file[url].canRead=canRead;
+       delayLoadFileStatus.file[url].canWrite=canWrite;
+       delayLoadFileStatus.file[url].canOwn=canOwn;
+       delayLoadFileStatus.file[url].islib=false;
+       if(name.toLowerCase().substring(name.length-3,name.length)=='.js') {
+        delayLoadFileStatus.file[url].jsfile=true;
+       }
+
+       receiver.getData(url, function(xhr){
+        if(xhr.status == 200){
+            var url=xhr.url;
+            var parent=delayLoadFileStatus.file[url].parent;
+            var name=delayLoadFileStatus.file[url].name;
+            var canRead=delayLoadFileStatus.file[url].canRead;
+            var canWrite=delayLoadFileStatus.file[url].canWrite;
+            var canOwn=delayLoadFileStatus.file[url].canOwn;
+
+            if(delayLoadFileStatus.file[url].jsfile) {
+                delayLoadFileStatus.file[url].js=xhr.responseText;
+                delayLoadFileStatus.jsfile[name]=delayLoadFileStatus.file[url];
+            }else{
+                Module['FS_createDataFile'](parent, name, new Uint8Array(xhr.response),canRead, canWrite,canOwn);
+             }
+        }
+        Module['removeRunDependency'](xhr.url);
+        },delayLoadFileStatus.file[url].jsfile);
+
     },
     createDevice: function(parent, name, input, output) {
       var path = PATH.join2(typeof parent === 'string' ? parent : FS.getPath(parent), name);

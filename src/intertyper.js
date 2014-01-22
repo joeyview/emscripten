@@ -565,7 +565,14 @@ function intertyper(lines, sidePass, baseLineNums) {
   }
   // function header
   function funcHeaderHandler(item) {
+	var private_=false;
     item.tokens = item.tokens.filter(function(token) {
+	 if(token.text in LLVM.VISIBILITIES) {
+	 	if(token.text in LLVM.PUBLIC) 
+	 		private_=false;
+	 	else
+	 		private_=true;
+	 }
       return !(token.text in LLVM.LINKAGES || token.text in LLVM.PARAM_ATTR || token.text in LLVM.FUNC_ATTR || token.text in LLVM.CALLING_CONVENTIONS);
     });
     var params = parseParamTokens(item.tokens[2].tokens);
@@ -573,6 +580,8 @@ function intertyper(lines, sidePass, baseLineNums) {
     return {
       intertype: 'function',
       ident: toNiceIdent(item.tokens[1].text),
+	  external:false,
+	  private_:private_,
       returnType: item.tokens[0].text,
       params: params,
       hasVarArgs: hasVarArgs(params),
@@ -1012,6 +1021,8 @@ function intertyper(lines, sidePass, baseLineNums) {
     var params = parseParamTokens(item.tokens[3].tokens);
     return {
       intertype: 'functionStub',
+	  external: true,
+	  private_: false,
       ident: toNiceIdent(item.tokens[2].text),
       returnType: item.tokens[1],
       params: params,
